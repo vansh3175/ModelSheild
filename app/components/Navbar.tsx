@@ -10,12 +10,12 @@
  * – Scroll shadow: becomes more opaque as user scrolls down
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ethers } from "ethers";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Wallet, Loader2, ChevronRight, Zap } from "lucide-react";
+import { ShieldCheck, Wallet, Loader2, ChevronRight, Zap, Copy, LogOut, Check } from "lucide-react";
 
 type ConnectState = "idle" | "connecting" | "connected";
 
@@ -29,6 +29,20 @@ export default function Navbar() {
   const [walletAddress, setWalletAddress] = useState<string>("");
   const [connectState, setConnectState]   = useState<ConnectState>("idle");
   const [scrolled, setScrolled]           = useState(false);
+  const [dropdownOpen, setDropdownOpen]   = useState(false);
+  const [copied, setCopied]               = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  /* Close dropdown when clicking outside */
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   /* Darken navbar on scroll */
   useEffect(() => {
@@ -37,8 +51,43 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  /* Auto-restore wallet if already authorised (no popup) */
+  useEffect(() => {
+    const restoreWallet = async () => {
+      if (typeof window === "undefined" || !(window as any).ethereum) return;
+      // Don't auto-reconnect if user explicitly disconnected this session
+      if (sessionStorage.getItem("wallet_disconnected") === "1") return;
+      try {
+        const accounts: string[] = await (window as any).ethereum.request({
+          method: "eth_accounts",
+        });
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+          setConnectState("connected");
+        }
+      } catch { /* ignore */ }
+    };
+    restoreWallet();
+
+    // Also update if user switches accounts in MetaMask
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) {
+        setWalletAddress("");
+        setConnectState("idle");
+      } else {
+        setWalletAddress(accounts[0]);
+        setConnectState("connected");
+      }
+    };
+    (window as any).ethereum?.on?.("accountsChanged", handleAccountsChanged);
+    return () => (window as any).ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
+  }, []);
+
   const connectWallet = async () => {
-    if (connectState === "connected") return;
+    if (connectState === "connected") {
+      setDropdownOpen((o) => !o);
+      return;
+    }
     if (typeof window === "undefined" || !(window as any).ethereum) {
       alert("Please install MetaMask to use ModelShield!");
       return;
@@ -48,12 +97,27 @@ export default function Navbar() {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer   = await provider.getSigner();
       const address  = await signer.getAddress();
+      sessionStorage.removeItem("wallet_disconnected"); // clear disconnect flag
       setWalletAddress(address);
       setConnectState("connected");
     } catch (err) {
       console.error("Wallet connection failed:", err);
       setConnectState("idle");
     }
+  };
+
+  const disconnectWallet = () => {
+    sessionStorage.setItem("wallet_disconnected", "1"); // persist across refresh
+    setWalletAddress("");
+    setConnectState("idle");
+    setDropdownOpen(false);
+  };
+
+  const copyAddress = async () => {
+    if (!walletAddress) return;
+    await navigator.clipboard.writeText(walletAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const shortAddress = walletAddress
@@ -157,75 +221,143 @@ export default function Navbar() {
           })}
         </div>
 
-        {/* ── Wallet Button ───────────────────────────────────── */}
-        <motion.button
-          onClick={connectWallet}
-          whileHover={connectState !== "connected" ? { scale: 1.04 } : {}}
-          whileTap={connectState !== "connected"   ? { scale: 0.97 } : {}}
-          disabled={connectState === "connecting"}
-          className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all"
-          style={{
-            background:
-              connectState === "connected"
-                ? "rgba(16,185,129,0.15)"
-                : "linear-gradient(135deg,rgba(0,212,255,0.15),rgba(139,92,246,0.15))",
-            border:
-              connectState === "connected"
-                ? "1px solid rgba(16,185,129,0.5)"
-                : "1px solid rgba(0,212,255,0.4)",
-            color:
-              connectState === "connected"
-                ? "#10b981"
-                : "#00d4ff",
-            boxShadow:
-              connectState === "connected"
-                ? "0 0 16px rgba(16,185,129,0.2)"
-                : "0 0 16px rgba(0,212,255,0.15)",
-            cursor: connectState === "connected" ? "default" : "pointer",
-          }}
-        >
-          <AnimatePresence mode="wait">
-            {connectState === "connecting" ? (
-              <motion.span
-                key="loading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
+        {/* ── Wallet Button + Disconnect Dropdown ─────────────── */}
+        <div className="relative" ref={dropdownRef}>
+          <motion.button
+            onClick={connectWallet}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            disabled={connectState === "connecting"}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background:
+                connectState === "connected"
+                  ? "rgba(16,185,129,0.15)"
+                  : "linear-gradient(135deg,rgba(0,212,255,0.15),rgba(139,92,246,0.15))",
+              border:
+                connectState === "connected"
+                  ? "1px solid rgba(16,185,129,0.5)"
+                  : "1px solid rgba(0,212,255,0.4)",
+              color:
+                connectState === "connected"
+                  ? "#10b981"
+                  : "#00d4ff",
+              boxShadow:
+                connectState === "connected"
+                  ? "0 0 16px rgba(16,185,129,0.2)"
+                  : "0 0 16px rgba(0,212,255,0.15)",
+              cursor: connectState === "connecting" ? "not-allowed" : "pointer",
+            }}
+          >
+            <AnimatePresence mode="wait">
+              {connectState === "connecting" ? (
+                <motion.span
+                  key="loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center gap-2"
+                >
+                  <Loader2 size={14} className="animate-spin" />
+                  Connecting…
+                </motion.span>
+              ) : connectState === "connected" ? (
+                <motion.span
+                  key="connected"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="flex items-center gap-2"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  {shortAddress}
+                  <ChevronRight
+                    size={12}
+                    style={{
+                      opacity: 0.6,
+                      transform: dropdownOpen ? "rotate(90deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                    }}
+                  />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="idle"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center gap-2"
+                >
+                  <Wallet size={14} />
+                  Connect Wallet
+                  <ChevronRight size={12} style={{ opacity: 0.6 }} />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+
+          {/* ── Dropdown panel ── */}
+          <AnimatePresence>
+            {dropdownOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0,  scale: 1 }}
+                exit={{ opacity: 0,  y: -8, scale: 0.96 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="absolute right-0 mt-2 w-64 rounded-2xl overflow-hidden"
+                style={{
+                  background: "rgba(3,15,34,0.96)",
+                  border: "1px solid rgba(0,212,255,0.18)",
+                  backdropFilter: "blur(20px)",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,212,255,0.06)",
+                  zIndex: 100,
+                }}
               >
-                <Loader2 size={14} className="animate-spin" />
-                Connecting…
-              </motion.span>
-            ) : connectState === "connected" ? (
-              <motion.span
-                key="connected"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="flex items-center gap-2"
-              >
-                {/* Pulsing green dot */}
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                {shortAddress}
-              </motion.span>
-            ) : (
-              <motion.span
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <Wallet size={14} />
-                Connect Wallet
-                <ChevronRight size={12} style={{ opacity: 0.6 }} />
-              </motion.span>
+                {/* Address */}
+                <div className="px-4 pt-4 pb-3">
+                  <p className="text-xs mb-1.5" style={{ color: "var(--text-muted)" }}>Connected wallet</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className="text-xs font-mono truncate"
+                      style={{ color: "#10b981", letterSpacing: "0.03em" }}
+                    >
+                      {walletAddress.slice(0, 10)}…{walletAddress.slice(-8)}
+                    </span>
+                    <button
+                      onClick={copyAddress}
+                      className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
+                      style={{
+                        background: copied ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        color: copied ? "#10b981" : "var(--text-muted)",
+                      }}
+                      title="Copy full address"
+                    >
+                      {copied ? <Check size={12} /> : <Copy size={12} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ height: "1px", background: "rgba(0,212,255,0.1)" }} />
+
+                {/* Disconnect */}
+                <button
+                  onClick={disconnectWallet}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors"
+                  style={{ color: "#f87171" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <LogOut size={14} />
+                  Disconnect wallet
+                </button>
+              </motion.div>
             )}
           </AnimatePresence>
-        </motion.button>
+        </div>
       </div>
     </motion.nav>
   );

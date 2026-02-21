@@ -19,17 +19,54 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, Fingerprint, ShieldOff, ShieldCheck,
   Clock, ExternalLink, AlertTriangle, CheckCircle2,
-  FileCode2, Cpu, Layers, Hash
+  FileCode2, Cpu, Layers, Hash, XCircle
 } from "lucide-react";
+import ScrambleText   from "@/app/components/ScrambleText";
+import TiltCard       from "@/app/components/TiltCard";
+import SuccessConfetti from "@/app/components/SuccessConfetti";
 
 /* ── Contract config ──────────────────────────────────────── */
 const contractABI = [
-  "function registerModel(string memory _fileHash, string memory _structuralHash, string memory _behavioralHash) public",
-  "event ModelRegistered(string fileHash, address owner, uint256 timestamp)",
+  // _fee = license price buyers pay (in wei). We default to 0.01 ETH.
+  "function registerModel(string memory _fileHash, string memory _structHash, string memory _behavHash, uint256 _fee) public",
+  "function hashToTokenId(string memory) public view returns (uint256)",
+  "function registeredModels(uint256) public view returns (string fileHash, string structuralHash, string behavioralHash, uint256 timestamp, address owner, uint256 licenseFee)",
   "function checkPlagiarism(string memory _s, string memory _b) public view returns (bool found, string memory matchedFileHash)",
 ];
 const CONTRACT_ADDRESS =
-  process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x52ade45e3ahaiciygiC6e7AD9";
+  process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xB33696938e5b161b337d58C03b98f7C28b065c0f";
+
+/* ── Sepolia network enforcer ────────────────────────────── */
+const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111
+
+async function ensureSepolia() {
+  const eth = (window as any).ethereum;
+  if (!eth) throw new Error("MetaMask is not installed!");
+  const currentChain: string = await eth.request({ method: "eth_chainId" });
+  if (currentChain.toLowerCase() === SEPOLIA_CHAIN_ID) return; // already correct
+  try {
+    await eth.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+  } catch (switchErr: any) {
+    // 4902 = chain not added yet — add it automatically
+    if (switchErr?.code === 4902) {
+      await eth.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: SEPOLIA_CHAIN_ID,
+          chainName: "Sepolia Testnet",
+          nativeCurrency: { name: "SepoliaETH", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://rpc.sepolia.org"],
+          blockExplorerUrls: ["https://sepolia.etherscan.io"],
+        }],
+      });
+    } else {
+      throw switchErr;
+    }
+  }
+}
 
 /* ── Phase metadata ───────────────────────────────────────── */
 const PHASES = [
@@ -40,7 +77,7 @@ const PHASES = [
 ] as const;
 
 type PhaseNum  = 0 | 1 | 2 | 3 | 4; // 0 = idle, 1-4 = active phases
-type StatusKind = "idle" | "running" | "success" | "blocked" | "error";
+type StatusKind = "idle" | "running" | "success" | "blocked" | "error" | "cancelled";
 
 export default function Home() {
   const [file,        setFile]        = useState<File | null>(null);
@@ -50,6 +87,7 @@ export default function Home() {
   const [statusMsg,   setStatusMsg]   = useState("Select a model file to begin.");
   const [hashes,      setHashes]      = useState<Record<string, string> | null>(null);
   const [txHash,      setTxHash]      = useState("");
+  const [showConfetti, setShowConfetti] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ── File selection helpers ─────────────────────────────── */
@@ -83,37 +121,70 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
       const { data: generatedHashes } = await axios.post(
-        "http://localhost:5000/generate-fingerprints",
-        formData
+        "https://q6lfgqkw-5000.inc1.devtunnels.ms/generate-fingerprints",
+        formData,
+        { timeout: 30000 }
       );
       setHashes(generatedHashes);
 
       // ── Phase 2: plagiarism check ──────────────────────────
       setPhase(2);
       setStatusMsg("Scanning blockchain for matching architectures…");
-      if (!(window as any).ethereum) throw new Error("MetaMask is not installed!");
+      await ensureSepolia(); // switch to Sepolia before any contract call
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer   = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
 
-      const plagiarismCheck = await contract.checkPlagiarism(
-        generatedHashes.structuralHash,
-        generatedHashes.behavioralHash
-      );
-      if (plagiarismCheck?.[0] === true) {
+      // Check 0: exact fileHash already registered? (hashToTokenId → tokenId > 0 means exists)
+      try {
+        const tokenId: bigint = await contract.hashToTokenId(generatedHashes.fileHash);
+        if (tokenId > 0n) {
+          setPhase(0);
+          setStatusKind("blocked");
+          setStatusMsg("This exact model is already registered on the blockchain.");
+          return;
+        }
+      } catch (e: any) {
+        // Revert = not found, safe to continue
+        if (e?.code !== "CALL_EXCEPTION" && !e?.code?.includes("BAD_DATA")) throw e;
+      }
+
+      // checkPlagiarism returns 0x when no match exists — handle gracefully
+      let alreadyExists = false;
+      try {
+        const plagiarismCheck = await contract.checkPlagiarism(
+          generatedHashes.structuralHash,
+          generatedHashes.behavioralHash
+        );
+        alreadyExists = plagiarismCheck?.[0] === true;
+      } catch (e: any) {
+        // BAD_DATA or CALL_EXCEPTION means contract returned empty (no match) — safe to proceed
+        if (
+          !e?.code?.includes("BAD_DATA") &&
+          e?.code !== "CALL_EXCEPTION" &&
+          !e?.message?.includes("require(false)")
+        ) throw e;
+      }
+      if (alreadyExists) {
         setPhase(0);
         setStatusKind("blocked");
         setStatusMsg("Registration blocked — this architecture is already registered.");
         return;
       }
 
-      // ── Phase 3: MetaMask sign ─────────────────────────────
       setPhase(3);
       setStatusMsg("Model is clean — please approve the transaction in MetaMask.");
+
+      // Send directly — staticCall is skipped because ERC721._mint() causes
+      // false reverts (data="0x") on staticCall even when the tx would succeed.
+      // Duplicates are already caught above via hashToTokenId + checkPlagiarism.
+      // License fee = 0.01 ETH (buyers pay this to the owner when licensing).
+      const licenseFeeSetting = ethers.parseEther("0.01");
       const tx = await contract.registerModel(
         generatedHashes.fileHash,
         generatedHashes.structuralHash,
-        generatedHashes.behavioralHash
+        generatedHashes.behavioralHash,
+        licenseFeeSetting
       );
 
       // ── Phase 4: block confirmation ────────────────────────
@@ -125,12 +196,43 @@ export default function Home() {
       setStatusKind("success");
       setStatusMsg("Model identity permanently registered on the blockchain.");
       setTxHash(tx.hash);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 1400);
 
     } catch (err: any) {
-      console.error(err);
       setPhase(0);
-      setStatusKind("error");
-      setStatusMsg(err?.message || "An unexpected error occurred.");
+      // Backend tunnel down / timeout
+      const isBackendDown =
+        err?.code === "ECONNABORTED" ||
+        err?.message?.toLowerCase().includes("timeout") ||
+        err?.message?.toLowerCase().includes("network error") ||
+        err?.message?.toLowerCase().includes("econnrefused");
+      if (isBackendDown) {
+        setStatusKind("error");
+        setStatusMsg("Cannot reach the backend server. Ask Vansh to restart the Python tunnel and update the URL.");
+        return;
+      }
+      const rejected =
+        err?.code === "ACTION_REJECTED" ||
+        err?.code === 4001 ||
+        err?.info?.error?.code === 4001 ||
+        err?.message?.toLowerCase().includes("user denied") ||
+        err?.message?.toLowerCase().includes("user rejected");
+      const alreadyRegistered =
+        err?.reason?.toLowerCase().includes("already") ||
+        err?.message?.toLowerCase().includes("already registered") ||
+        err?.data?.message?.toLowerCase().includes("already");
+      if (rejected) {
+        setStatusKind("cancelled");
+        setStatusMsg("Transaction cancelled — you rejected the MetaMask request.");
+      } else if (alreadyRegistered) {
+        setStatusKind("blocked");
+        setStatusMsg("This model is already registered on the blockchain.");
+      } else {
+        console.error(err);
+        setStatusKind("error");
+        setStatusMsg(err?.reason || err?.message || "An unexpected error occurred.");
+      }
     }
   };
 
@@ -183,8 +285,9 @@ export default function Home() {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true);  }}
-        onDragLeave={() => setDragOver(false)}
+        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+        onDragOver={(e)  => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
         className="relative cursor-pointer rounded-2xl p-10 text-center transition-all duration-300 overflow-hidden"
@@ -274,7 +377,7 @@ export default function Home() {
           disabled={!file || isRunning}
           whileHover={!file || isRunning ? {} : { scale: 1.02, y: -2 }}
           whileTap={!file  || isRunning ? {} : { scale: 0.98 }}
-          className="relative w-full py-4 rounded-2xl font-bold text-base tracking-wide overflow-hidden transition-all"
+          className="relative w-full py-4 rounded-2xl font-bold text-base tracking-wide overflow-hidden transition-all magnetic-btn"
           style={{
             background:
               !file || isRunning
@@ -425,40 +528,50 @@ export default function Home() {
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{   opacity: 0, y: -8, scale: 0.97  }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="rounded-2xl p-6 space-y-4"
+            className={`rounded-2xl p-6 space-y-4 ${statusKind === "success" ? "success-ring" : ""}`}
             style={{
               background:
-                statusKind === "success" ? "rgba(16,185,129,0.07)"
-              : statusKind === "blocked" ? "rgba(245,158,11,0.07)"
-              : statusKind === "error"   ? "rgba(239,68,68,0.07)"
+                statusKind === "success"   ? "rgba(16,185,129,0.07)"
+              : statusKind === "blocked"   ? "rgba(245,158,11,0.07)"
+              : statusKind === "error"     ? "rgba(239,68,68,0.07)"
+              : statusKind === "cancelled" ? "rgba(100,116,139,0.07)"
               : "rgba(5,20,45,0.7)",
               border:
-                statusKind === "success" ? "1px solid rgba(16,185,129,0.35)"
-              : statusKind === "blocked" ? "1px solid rgba(245,158,11,0.35)"
-              : statusKind === "error"   ? "1px solid rgba(239,68,68,0.35)"
+                statusKind === "success"   ? "1px solid rgba(16,185,129,0.35)"
+              : statusKind === "blocked"   ? "1px solid rgba(245,158,11,0.35)"
+              : statusKind === "error"     ? "1px solid rgba(239,68,68,0.35)"
+              : statusKind === "cancelled" ? "1px solid rgba(100,116,139,0.35)"
               : "1px solid rgba(0,212,255,0.12)",
               backdropFilter: "blur(16px)",
+              position: "relative",
+              overflow: "hidden",
             }}
           >
+            {/* Confetti burst on success */}
+            {showConfetti && statusKind === "success" && <SuccessConfetti />}
+
             {/* Status header */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" style={{ position: "relative", zIndex: 1 }}>
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
                 style={{
                   background:
-                    statusKind === "success" ? "rgba(16,185,129,0.15)"
-                  : statusKind === "blocked" ? "rgba(245,158,11,0.15)"
+                    statusKind === "success"   ? "rgba(16,185,129,0.15)"
+                  : statusKind === "blocked"   ? "rgba(245,158,11,0.15)"
+                  : statusKind === "cancelled" ? "rgba(100,116,139,0.15)"
                   : "rgba(239,68,68,0.15)",
                 }}
               >
-                {statusKind === "success" && <ShieldCheck   size={20} style={{ color: "#10b981" }} />}
-                {statusKind === "blocked" && <ShieldOff     size={20} style={{ color: "#f59e0b" }} />}
-                {statusKind === "error"   && <AlertTriangle size={20} style={{ color: "#ef4444" }} />}
+                {statusKind === "success"   && <ShieldCheck   size={20} style={{ color: "#10b981" }} />}
+                {statusKind === "blocked"   && <ShieldOff     size={20} style={{ color: "#f59e0b" }} />}
+                {statusKind === "error"     && <AlertTriangle size={20} style={{ color: "#ef4444" }} />}
+                {statusKind === "cancelled" && <XCircle       size={20} style={{ color: "#94a3b8" }} />}
               </div>
               <p className="text-sm font-semibold"
                  style={{
-                   color: statusKind === "success" ? "#10b981"
-                        : statusKind === "blocked" ? "#f59e0b"
+                   color: statusKind === "success"   ? "#10b981"
+                        : statusKind === "blocked"   ? "#f59e0b"
+                        : statusKind === "cancelled" ? "#94a3b8"
                         : "#ef4444",
                  }}>
                 {statusMsg}
@@ -476,6 +589,8 @@ export default function Home() {
                 transition={{ delay: 0.3 }}
                 className="flex items-center gap-2 text-xs px-4 py-2.5 rounded-xl w-full font-mono break-all neon-link"
                 style={{
+                  position: "relative",
+                  zIndex: 1,
                   background: "rgba(0,212,255,0.06)",
                   border: "1px solid rgba(0,212,255,0.2)",
                   color: "#00d4ff",
@@ -497,6 +612,8 @@ export default function Home() {
             animate={{ opacity: 1, y: 0  }}
             exit={{   opacity: 0          }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
+          <TiltCard
             className="rounded-2xl overflow-hidden"
             style={{
               background: "rgba(5,20,45,0.7)",
@@ -543,10 +660,13 @@ export default function Home() {
                       {label}
                     </span>
                   </div>
-                  <p className="hash-text">{hashes[key]}</p>
+                  <p className="hash-text">
+                    <ScrambleText text={hashes[key]} speed={14} />
+                  </p>
                 </motion.div>
               ))}
             </div>
+          </TiltCard>
           </motion.div>
         )}
       </AnimatePresence>

@@ -27,14 +27,49 @@ import {
   AlertOctagon, User, Calendar, FileCode2, Cpu, Layers,
   CheckCircle2, XCircle, MinusCircle, Hash
 } from "lucide-react";
+import ScrambleText from "@/app/components/ScrambleText";
+import TiltCard    from "@/app/components/TiltCard";
+
+/* ── Sepolia network enforcer ────────────────────────────── */
+const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111
+
+async function ensureSepolia() {
+  const eth = (window as any).ethereum;
+  if (!eth) throw new Error("MetaMask is not installed!");
+  const currentChain: string = await eth.request({ method: "eth_chainId" });
+  if (currentChain.toLowerCase() === SEPOLIA_CHAIN_ID) return;
+  try {
+    await eth.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+  } catch (switchErr: any) {
+    if (switchErr?.code === 4902) {
+      await eth.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: SEPOLIA_CHAIN_ID,
+          chainName: "Sepolia Testnet",
+          nativeCurrency: { name: "SepoliaETH", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://rpc.sepolia.org"],
+          blockExplorerUrls: ["https://sepolia.etherscan.io"],
+        }],
+      });
+    } else {
+      throw switchErr;
+    }
+  }
+}
 
 /* ── Contract ──────────────────────────────────────────────── */
 const CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xB33696938e5b161b337d58C03b98f7C28b065c0f";
 
 const contractABI = [
-  "function registeredModels(string memory) public view returns (string fileHash, string structuralHash, string behavioralHash, uint256 timestamp, address owner)",
+  "function hashToTokenId(string memory) public view returns (uint256)",
+  "function registeredModels(uint256) public view returns (string fileHash, string structuralHash, string behavioralHash, uint256 timestamp, address owner, uint256 licenseFee)",
   "function checkPlagiarism(string memory _s, string memory _b) public view returns (bool found, string memory matchedFileHash)",
+  "function buyLicense(uint256 _tokenId) public payable",
 ];
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -72,19 +107,218 @@ function EvidenceBadge({ match, label }: { match: boolean | null; label: string 
     </div>
   );
 }
+/* ── License Panel component ───────────────────────────────── */
+function LicensePanel({
+  fileHash, status, txHash, onBuy
+}: {
+  fileHash: string;
+  status: LicenseStatus;
+  txHash: string;
+  onBuy: (hash: string) => void;
+}) {
+  return (
+    <div
+      className="mx-6 mb-6 rounded-2xl overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, rgba(139,92,246,0.08), rgba(0,212,255,0.05))",
+        border: "1px solid rgba(139,92,246,0.3)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="px-5 py-3 flex items-center gap-2"
+        style={{ borderBottom: "1px solid rgba(139,92,246,0.15)", background: "rgba(139,92,246,0.08)" }}
+      >
+        <span className="text-sm font-bold" style={{ color: "#8b5cf6" }}>
+          Use This Model Legally
+        </span>
+        <span
+          className="ml-auto text-xs px-2 py-0.5 rounded-full font-semibold"
+          style={{ background: "rgba(139,92,246,0.15)", color: "#8b5cf6", border: "1px solid rgba(139,92,246,0.3)" }}
+        >
+          NFT License
+        </span>
+      </div>
+
+      {/* Body */}
+      <div className="px-5 py-4 space-y-4">
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+          Purchase a permanent on-chain license for <strong style={{ color: "var(--text-primary)" }}>0.01 ETH</strong>.
+          Your wallet address will be recorded as a licensed user — verifiable by anyone on Etherscan.
+        </p>
+
+        {/* Buy button */}
+        {status !== "bought" && (
+          <motion.button
+            onClick={() => onBuy(fileHash)}
+            disabled={status === "buying"}
+            whileHover={status !== "buying" ? { scale: 1.02, y: -1 } : {}}
+            whileTap={status !== "buying"   ? { scale: 0.98 }        : {}}
+            className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+            style={{
+              background: status === "buying"
+                ? "rgba(255,255,255,0.05)"
+                : "linear-gradient(135deg, #8b5cf6, #00d4ff)",
+              color: status === "buying" ? "var(--text-muted)" : "#fff",
+              cursor: status === "buying" ? "not-allowed" : "pointer",
+              border: "1px solid transparent",
+              boxShadow: status === "buying" ? "none" : "0 4px 24px rgba(139,92,246,0.35)",
+            }}
+          >
+            {status === "buying" ? (
+              <>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-4 h-4 rounded-full"
+                  style={{ border: "2px solid rgba(255,255,255,0.2)", borderTop: "2px solid #fff" }}
+                />
+                Processing payment…
+              </>
+            ) : (
+              <>
+                {/* ETH diamond icon */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2L2 12l10 6 10-6L12 2zm0 3.5L19 12l-7 4.2L5 12l7-6.5z" opacity="0.6"/>
+                  <path d="M2 14l10 6 10-6-10-5.8L2 14z"/>
+                </svg>
+                Buy License — 0.01 ETH
+              </>
+            )}
+          </motion.button>
+        )}
+
+        {/* Error state */}
+        {status === "error" && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-xs text-center"
+            style={{ color: "#ef4444" }}
+          >
+            Transaction failed or rejected. Please try again.
+          </motion.p>
+        )}
+
+        {/* Success state */}
+        {status === "bought" && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-3"
+          >
+            <div
+              className="flex items-center gap-3 px-4 py-3 rounded-xl"
+              style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.4)" }}
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)" }}
+              >
+                {/* Checkmark */}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ color: "#10b981" }}>License Purchased!</p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Your wallet is now a verified licensee on the blockchain.
+                </p>
+              </div>
+            </div>
+            <a
+              href={`https://sepolia.etherscan.io/tx/${txHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs font-mono px-3 py-2 rounded-lg break-all neon-link"
+              style={{
+                background: "rgba(0,212,255,0.05)",
+                border: "1px solid rgba(0,212,255,0.2)",
+                color: "#00d4ff",
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              View on Etherscan: {txHash}
+            </a>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
+/* ── License buy status ───────ca─────────────────────────────── */
+type LicenseStatus = "idle" | "buying" | "bought" | "error";
 
 /* ── Main Component ────────────────────────────────────────── */
 export default function Verify() {
-  const [file,    setFile]    = useState<File | null>(null);
-  const [dragOver,setDragOver]= useState(false);
-  const [loading, setLoading] = useState(false);
-  const [scanStep,setScanStep]= useState<"l1" | "l2" | null>(null);
-  const [report,  setReport]  = useState<Report | null>(null);
+  const [file,          setFile]          = useState<File | null>(null);
+  const [dragOver,      setDragOver]      = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const [scanStep,      setScanStep]      = useState<"l1" | "l2" | null>(null);
+  const [report,        setReport]        = useState<Report | null>(null);
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus>("idle");
+  const [licenseTxHash, setLicenseTxHash] = useState("");
+  // tokenId is resolved during verification — reused in handleBuyLicense to avoid re-fetch
+  const [matchedTokenId, setMatchedTokenId] = useState<bigint | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const applyFile = (f: File) => {
     setFile(f);
     setReport(null);
+    setLicenseStatus("idle");
+    setMatchedTokenId(null);
+    setLicenseTxHash("");
+  };
+
+  /* ── Buy license flow ──────────────────────────────────────── */
+  const handleBuyLicense = async (fileHash: string) => {
+    if (!(window as any).ethereum) return alert("MetaMask is required to buy a license!");
+    try {
+      setLicenseStatus("buying");
+      await ensureSepolia();
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer   = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
+
+      // Use tokenId stored during verification — avoids a second hashToTokenId call
+      let tokenId: bigint | null = matchedTokenId;
+      if (!tokenId || tokenId === 0n) {
+        // Fallback: look it up (should not normally be needed)
+        try {
+          tokenId = BigInt(await contract.hashToTokenId(fileHash));
+        } catch { /* ignore */ }
+      }
+      if (!tokenId || tokenId === 0n) throw new Error("Model not found on blockchain.");
+
+      // Use licenseFee from contract (default 0.01 ETH if lookup fails)
+      let fee: bigint = ethers.parseEther("0.01");
+      try {
+        const modelData = await contract.registeredModels(tokenId);
+        if (modelData?.licenseFee) fee = BigInt(modelData.licenseFee);
+      } catch { /* use default fee */ }
+
+      const tx = await contract.buyLicense(tokenId, { value: fee });
+      await tx.wait();
+      setLicenseTxHash(tx.hash);
+      setLicenseStatus("bought");
+    } catch (err: any) {
+      const rejected =
+        err?.code === "ACTION_REJECTED" ||
+        err?.code === 4001 ||
+        err?.info?.error?.code === 4001 ||
+        err?.message?.toLowerCase().includes("user denied") ||
+        err?.message?.toLowerCase().includes("user rejected");
+      if (rejected) {
+        setLicenseStatus("idle");
+      } else {
+        console.error("License purchase failed:", err);
+        setLicenseStatus("error");
+      }
+    }
   };
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -106,22 +340,64 @@ export default function Verify() {
       const formData = new FormData();
       formData.append("file", file);
       const { data: localHashes } = await axios.post(
-        "http://localhost:5000/generate-fingerprints",
-        formData
+        "https://q6lfgqkw-5000.inc1.devtunnels.ms/generate-fingerprints",
+        formData,
+        { timeout: 30000 }
       );
 
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      // ── 2. Ensure Sepolia network, then set up provider ──────────
+      let provider: ethers.BrowserProvider | ethers.JsonRpcProvider;
+      if ((window as any).ethereum) {
+        await ensureSepolia(); // auto-switch MetaMask to Sepolia
+        provider = new ethers.BrowserProvider((window as any).ethereum);
+      } else {
+        // Fallback: public Sepolia RPC for read-only calls
+        provider = new ethers.JsonRpcProvider("https://rpc.sepolia.org");
+      }
       const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, provider);
 
-      // 2. L1 — exact match
+      /**
+       * Safe lookup: fileHash → tokenId → ModelData, or null if not registered.
+       * Contract maps registeredModels by uint256 tokenId, not by string hash.
+       * Use hashToTokenId(fileHash) first to get the tokenId.
+       */
+      const safeRegisteredModels = async (fileHash: string) => {
+        try {
+          const tokenId: bigint = await contract.hashToTokenId(fileHash);
+          if (!tokenId || tokenId === 0n) return null;
+          const d = await contract.registeredModels(tokenId);
+          if (!d || d.timestamp === 0n || d.timestamp === undefined) return null;
+          // Ethers v6 Result objects are array-like — spread only copies numeric indices.
+          // Explicitly extract every named field so properties survive the plain object return.
+          return {
+            fileHash:       String(d.fileHash       ?? ""),
+            structuralHash: String(d.structuralHash ?? ""),
+            behavioralHash: String(d.behavioralHash ?? ""),
+            timestamp:      BigInt(d.timestamp      ?? 0n),
+            owner:          String(d.owner          ?? ""),
+            licenseFee:     BigInt(d.licenseFee     ?? 0n),
+            tokenId,
+          };
+        } catch (e: any) {
+          if (
+            e?.code === "BAD_DATA" ||
+            e?.code === "CALL_EXCEPTION" ||
+            e?.message?.includes("BAD_DATA") ||
+            e?.message?.includes("require(false)")
+          ) return null;
+          throw e;
+        }
+      };
+
+      // 3. L1 — exact match
       setScanStep("l1");
-      let blockchainData = await contract.registeredModels(localHashes.fileHash);
+      let blockchainData: any = await safeRegisteredModels(localHashes.fileHash);
       let matchKind: MatchKind | null = null;
 
-      if (blockchainData.timestamp !== 0n) {
+      if (blockchainData) {
         matchKind = "EXACT";
       } else {
-        // 3. L2 — deep structural / behavioral scan
+        // 4. L2 — deep structural / behavioral scan
         setScanStep("l2");
         try {
           const result = await contract.checkPlagiarism(
@@ -129,15 +405,21 @@ export default function Verify() {
             localHashes.behavioralHash
           );
           if (result?.[0] === true) {
-            blockchainData = await contract.registeredModels(result[1]);
-            matchKind = "DEEP";
+            blockchainData = await safeRegisteredModels(result[1]);
+            if (blockchainData) matchKind = "DEEP";
           }
-        } catch (scanErr) {
-          console.error("Deep scan error:", scanErr);
+        } catch (scanErr: any) {
+          // CALL_EXCEPTION when list is empty = no plagiarism, safe to treat as clean
+          if (
+            scanErr?.code !== "BAD_DATA" &&
+            scanErr?.code !== "CALL_EXCEPTION" &&
+            !scanErr?.message?.includes("require(false)")
+          ) console.error("Deep scan error:", scanErr);
         }
       }
 
-      if (matchKind && blockchainData?.timestamp !== 0n) {
+      if (matchKind && blockchainData) {
+        setMatchedTokenId(blockchainData.tokenId ?? null);
         setReport({
           kind: matchKind,
           local: localHashes,
@@ -146,7 +428,12 @@ export default function Verify() {
             structuralHash: blockchainData.structuralHash,
             behavioralHash: blockchainData.behavioralHash,
             owner:          blockchainData.owner,
-            date: new Date(Number(blockchainData.timestamp) * 1000).toLocaleString(),
+            date: (() => {
+              const ts = Number(blockchainData.timestamp);
+              if (!ts || isNaN(ts)) return "Unknown";
+              const d = new Date(ts * 1000);
+              return isNaN(d.getTime()) ? "Unknown" : d.toLocaleString();
+            })(),
           },
         });
       } else {
@@ -155,7 +442,25 @@ export default function Verify() {
 
     } catch (err: any) {
       console.error("Verify error:", err);
-      alert("System error: ensure the Python backend is running and MetaMask is available.");
+      // Backend tunnel down / timeout
+      const isBackendDown =
+        err?.code === "ECONNABORTED" ||
+        err?.message?.toLowerCase().includes("timeout") ||
+        err?.message?.toLowerCase().includes("network error") ||
+        err?.message?.toLowerCase().includes("econnrefused");
+      if (isBackendDown) {
+        alert("Cannot reach the backend server. Ask Vansh to restart the Python tunnel and update the URL.");
+      } else if (
+        err?.code === "BAD_DATA" ||
+        err?.code === "CALL_EXCEPTION" ||
+        err?.message?.includes("BAD_DATA") ||
+        err?.message?.includes("require(false)")
+      ) {
+        // Contract returned empty / reverted — model simply not registered
+        setReport({ kind: "CLEAN", local: {} });
+      } else {
+        alert("System error: ensure the Python backend is running.");
+      }
     } finally {
       setLoading(false);
       setScanStep(null);
@@ -208,8 +513,9 @@ export default function Verify() {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
+        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+        onDragOver={(e)  => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); }}
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
         className="relative cursor-pointer rounded-2xl p-10 text-center transition-all duration-300 overflow-hidden"
@@ -404,6 +710,8 @@ export default function Verify() {
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{   opacity: 0          }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
+          <TiltCard
             className="rounded-2xl overflow-hidden"
             style={{
               background: "rgba(239,68,68,0.06)",
@@ -444,7 +752,7 @@ export default function Verify() {
                 <div>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>Original Owner</p>
                   <p className="text-sm font-mono font-semibold break-all" style={{ color: "#ef4444" }}>
-                    {report.original!.owner}
+                    {report.original!.owner || "Unknown"}
                   </p>
                 </div>
               </div>
@@ -468,6 +776,15 @@ export default function Verify() {
               <EvidenceBadge match={true}  label="Architecture Fingerprint" />
               <EvidenceBadge match={true}  label="Behavioral Logic Hash" />
             </div>
+
+            {/* Buy License */}
+            <LicensePanel
+              fileHash={report.original!.fileHash}
+              status={licenseStatus}
+              txHash={licenseTxHash}
+              onBuy={handleBuyLicense}
+            />
+          </TiltCard>
           </motion.div>
         )}
 
@@ -479,6 +796,8 @@ export default function Verify() {
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{   opacity: 0          }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
+          <TiltCard
             className="rounded-2xl overflow-hidden"
             style={{
               background: "rgba(245,158,11,0.06)",
@@ -543,6 +862,15 @@ export default function Verify() {
               <EvidenceBadge match={true}  label="Architecture Fingerprint" />
               <EvidenceBadge match={true}  label="Behavioral Logic Hash" />
             </div>
+
+            {/* Buy License */}
+            <LicensePanel
+              fileHash={report.original!.fileHash}
+              status={licenseStatus}
+              txHash={licenseTxHash}
+              onBuy={handleBuyLicense}
+            />
+          </TiltCard>
           </motion.div>
         )}
 
@@ -554,6 +882,8 @@ export default function Verify() {
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{   opacity: 0          }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
+          <TiltCard
             className="rounded-2xl overflow-hidden"
             style={{
               background: "rgba(16,185,129,0.06)",
@@ -624,10 +954,13 @@ export default function Verify() {
                     <span className="text-xs font-semibold uppercase tracking-widest"
                           style={{ color: "var(--text-muted)" }}>{label}</span>
                   </div>
-                  <p className="hash-text">{report.local[key]}</p>
+                  <p className="hash-text">
+                    <ScrambleText text={report.local[key] || ""} speed={14} />
+                  </p>
                 </div>
               ))}
             </div>
+          </TiltCard>
           </motion.div>
         )}
 

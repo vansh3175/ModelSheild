@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local-only files — not pushed to shared repo (Vansh's code is the live version)
+/backend/
+/contract/
+DEPLOY.md
+/test_models/

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/app/components/Navbar";
 import AnimatedBackground from "@/app/components/AnimatedBackground";
+import CursorGlow from "@/app/components/CursorGlow";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -22,6 +23,8 @@ export default function RootLayout({
       <body className={`${inter.variable} min-h-screen`} style={{ background: "#010a18" }}>
         {/* Full-page animated background — fixed, behind everything */}
         <AnimatedBackground />
+        {/* Cursor spotlight glow */}
+        <CursorGlow />
         {/* Sticky top navbar */}
         <Navbar />
         {/* Page content */}
