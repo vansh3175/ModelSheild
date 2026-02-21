@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/app/components/Navbar";
+import AnimatedBackground from "@/app/components/AnimatedBackground";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "AI Model Identity Registry",
-  description: "Prove ownership of your AI models via Blockchain",
+  title: "ModelShield — Decentralized AI Registry",
+  description: "Cryptographic integrity verification and tamper detection for AI models on the blockchain.",
 };
 
 export default function RootLayout({
@@ -16,10 +17,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-gray-50 min-h-screen`}>
+    <html lang="en" className="dark">
+      {/* Dark base: bg-base from globals.css via inline style fallback */}
+      <body className={`${inter.variable} min-h-screen`} style={{ background: "#010a18" }}>
+        {/* Full-page animated background — fixed, behind everything */}
+        <AnimatedBackground />
+        {/* Sticky top navbar */}
         <Navbar />
-        <main className="container mx-auto p-8">
+        {/* Page content */}
+        <main className="relative z-10 container mx-auto px-4 py-10 max-w-5xl">
           {children}
         </main>
       </body>
