@@ -1,4 +1,4 @@
-# ??? ModelShield — AI Model Integrity Registry on Blockchain
+# ModelShield - AI Model Integrity Registry on Blockchain
 
 <div align="center">
 
@@ -13,41 +13,41 @@
 
 ---
 
-## ?? Table of Contents
+## Table of Contents
 
-1. [What is ModelShield?](#-what-is-modelshield)
-2. [The Problem It Solves](#-the-problem-it-solves)
-3. [System Architecture](#-system-architecture)
-4. [How It Works — Step by Step](#-how-it-works--step-by-step)
-5. [Tech Stack](#-tech-stack)
-6. [Project Structure](#-project-structure)
-7. [Smart Contract Deep Dive](#-smart-contract-deep-dive)
-8. [Python Backend Deep Dive](#-python-backend-deep-dive)
-9. [Frontend Pages](#-frontend-pages)
-10. [UI Components](#-ui-components)
-11. [Getting Started](#-getting-started)
-12. [Environment Variables](#-environment-variables)
-13. [Wallet & Network Setup](#-wallet--network-setup)
-14. [API Reference](#-api-reference)
-15. [Known Limitations](#-known-limitations)
-16. [Contributors](#-contributors)
+1. [What is ModelShield?](#what-is-modelshield)
+2. [The Problem It Solves](#the-problem-it-solves)
+3. [System Architecture](#system-architecture)
+4. [How It Works - Step by Step](#how-it-works---step-by-step)
+5. [Tech Stack](#tech-stack)
+6. [Project Structure](#project-structure)
+7. [Smart Contract Deep Dive](#smart-contract-deep-dive)
+8. [Python Backend Deep Dive](#python-backend-deep-dive)
+9. [Frontend Pages](#frontend-pages)
+10. [UI Components](#ui-components)
+11. [Getting Started](#getting-started)
+12. [Environment Variables](#environment-variables)
+13. [Wallet & Network Setup](#wallet--network-setup)
+14. [API Reference](#api-reference)
+15. [Known Limitations](#known-limitations)
+16. [Contributors](#contributors)
 
 ---
 
-## ?? What is ModelShield?
+## What is ModelShield?
 
 ModelShield is a **decentralized AI model registry** built on the Ethereum blockchain. It lets AI developers:
 
-- ? **Prove ownership** of a trained model at a specific point in time
-- ? **Detect copies** — both exact binary copies and architectural/behavioral clones
-- ? **Issue licenses** — sell usage rights as an NFT recorded permanently on-chain
-- ? **Stay tamper-proof** — blockchain records are immutable and public, no central authority needed
+- **Prove ownership** of a trained model at a specific point in time
+- **Detect copies** - both exact binary copies and architectural/behavioral clones
+- **Issue licenses** - sell usage rights as an NFT recorded permanently on-chain
+- **Stay tamper-proof** - blockchain records are immutable and public, no central authority needed
 
-> Think of it as a **"copyright office for AI models"** — automated, instant, and decentralized.
+> Think of it as a **"copyright office for AI models"** - automated, instant, and decentralized.
 
 ---
 
-## ?? The Problem It Solves
+## The Problem It Solves
 
 AI models take months and significant compute resources to train. Currently:
 
@@ -62,70 +62,70 @@ AI models take months and significant compute resources to train. Currently:
 
 ---
 
-## ??? System Architecture
+## System Architecture
 
 ```
 +--------------------------------------------------------------+
-¦                        USER BROWSER                          ¦
-¦                                                              ¦
-¦   +------------------+        +--------------------------+  ¦
-¦   ¦  Next.js Frontend¦        ¦     MetaMask Wallet      ¦  ¦
-¦   ¦  (React / TS)    ¦?------?¦  (Signs Transactions)    ¦  ¦
-¦   +------------------+        +--------------------------+  ¦
-¦            ¦                              ¦                  ¦
-+------------+------------------------------+------------------+
-             ¦ HTTP POST                    ¦ ethers.js v6
-             ¦ multipart/form-data          ¦ JSON-RPC calls
-             ?                              ?
+|                        USER BROWSER                          |
+|                                                              |
+|   +------------------+        +--------------------------+  |
+|   |  Next.js Frontend|        |     MetaMask Wallet      |  |
+|   |  (React / TS)    |<------>|  (Signs Transactions)    |  |
+|   +--------+---------+        +------------+-------------+  |
+|            |                               |                 |
++------------+-------------------------------+-----------------+
+             | HTTP POST                     | ethers.js v6
+             | multipart/form-data           | JSON-RPC calls
+             v                               v
 +------------------------+   +---------------------------------+
-¦  Python Flask Server   ¦   ¦   Ethereum Sepolia Testnet      ¦
-¦  (Fingerprint Engine)  ¦   ¦                                 ¦
-¦                        ¦   ¦  +--------------------------+  ¦
-¦  • SHA-256 file hash   ¦   ¦  ¦  ModelRegistryEconomy    ¦  ¦
-¦  • Architecture hash   ¦   ¦  ¦  Smart Contract (ERC-721) ¦  ¦
-¦  • Behavioral hash     ¦   ¦  ¦                          ¦  ¦
-¦                        ¦   ¦  ¦  registerModel()         ¦  ¦
-¦  Supports:             ¦   ¦  ¦  checkPlagiarism()       ¦  ¦
-¦  • .pkl  (Scikit-Learn)¦   ¦  ¦  buyLicense()            ¦  ¦
-¦  • .h5 / .keras  (TF)  ¦   ¦  ¦  hashToTokenId()         ¦  ¦
-+------------------------+   ¦  +--------------------------+  ¦
+|  Python Flask Server   |   |   Ethereum Sepolia Testnet      |
+|  (Fingerprint Engine)  |   |                                 |
+|                        |   |  +--------------------------+  |
+|  - SHA-256 file hash   |   |  |  ModelRegistryEconomy    |  |
+|  - Architecture hash   |   |  |  Smart Contract (ERC-721) |  |
+|  - Behavioral hash     |   |  |                          |  |
+|                        |   |  |  registerModel()         |  |
+|  Supports:             |   |  |  checkPlagiarism()       |  |
+|  - .pkl  (Scikit-Learn)|   |  |  buyLicense()            |  |
+|  - .h5 / .keras  (TF)  |   |  |  hashToTokenId()         |  |
++------------------------+   |  +--------------------------+  |
                              +---------------------------------+
 ```
 
 ---
 
-## ?? How It Works — Step by Step
+## How It Works - Step by Step
 
 ### Registering a Model
 
 ```
 Step 1: User uploads .pkl / .h5 / .keras file
-           ¦
-           ?
+           |
+           v
 Step 2: Python backend generates 3 hashes:
         +------------------------------------------------------+
-        ¦ fileHash       = SHA-256(raw file bytes)             ¦
-        ¦                  ? Detects EXACT copies              ¦
-        ¦                                                      ¦
-        ¦ structuralHash = SHA-256(model layer architecture)   ¦
-        ¦                  ? Detects ARCHITECTURE clones       ¦
-        ¦                                                      ¦
-        ¦ behavioralHash = SHA-256(model output on test input) ¦
-        ¦                  ? Detects BEHAVIORAL clones         ¦
+        | fileHash       = SHA-256(raw file bytes)             |
+        |                  --> Detects EXACT copies            |
+        |                                                      |
+        | structuralHash = SHA-256(model layer architecture)   |
+        |                  --> Detects ARCHITECTURE clones     |
+        |                                                      |
+        | behavioralHash = SHA-256(model output on test input) |
+        |                  --> Detects BEHAVIORAL clones       |
         +------------------------------------------------------+
-           ¦
-           ?
-Step 3: Frontend checks blockchain — already registered? ? Block early
-           ¦
-           ?
+           |
+           v
+Step 3: Frontend checks blockchain -- already registered? --> Block early
+           |
+           v
 Step 4: User approves MetaMask transaction
-           ¦
-           ?
+           |
+           v
 Step 5: Smart contract mints ERC-721 NFT to user's wallet
         Stores: fileHash, structuralHash, behavioralHash,
                 block.timestamp, msg.sender (owner), licenseFee
-           ¦
-           ?
+           |
+           v
 Step 6: Model is permanently on-chain. Token ID returned.
         Verifiable on Etherscan forever.
 ```
@@ -134,27 +134,27 @@ Step 6: Model is permanently on-chain. Token ID returned.
 
 ```
 Step 1: Upload the model file to check
-           ¦
-           ?
+           |
+           v
 Step 2: Python backend generates the same 3 hashes
-           ¦
-           ?
-Step 3: L1 — Exact Check (fast, O(1))
-        hashToTokenId(fileHash) ? tokenId > 0?
-        YES ? LEVEL 1: EXACT COPY (red)
-           ¦ NO
-           ?
-Step 4: L2 — Deep Scan (loops all registered models)
+           |
+           v
+Step 3: L1 - Exact Check (fast, O(1))
+        hashToTokenId(fileHash) --> tokenId > 0?
+        YES --> LEVEL 1: EXACT COPY  [red]
+           | NO
+           v
+Step 4: L2 - Deep Scan (loops all registered models)
         checkPlagiarism(structuralHash, behavioralHash)
-        Match found? ? LEVEL 2: DEEP CLONE (amber)
-           ¦ NO
-           ?
-Step 5: CLEAN — Original, not found in registry (green)
+        Match found? --> LEVEL 2: DEEP CLONE  [amber]
+           | NO
+           v
+Step 5: CLEAN - Original, not found in registry  [green]
 ```
 
 ---
 
-## ?? Tech Stack
+## Tech Stack
 
 | Layer | Technology | Version | Purpose |
 |-------|-----------|---------|---------|
@@ -169,31 +169,31 @@ Step 5: CLEAN — Original, not found in registry (green)
 | Backend | Python + Flask | 3.x | AI model fingerprinting server |
 | ML Libraries | TensorFlow + Scikit-Learn + NumPy | latest | Model loading, inference, hashing |
 | Smart Contract | Solidity | 0.8.20 | On-chain registry & economy logic |
-| NFT Standard | ERC-721 (OpenZeppelin) | — | Each model = unique NFT |
-| Network | Ethereum Sepolia Testnet | — | Test blockchain environment |
-| Wallet | MetaMask | — | Transaction signing & wallet management |
+| NFT Standard | ERC-721 (OpenZeppelin) | - | Each model = unique NFT |
+| Network | Ethereum Sepolia Testnet | - | Test blockchain environment |
+| Wallet | MetaMask | - | Transaction signing & wallet management |
 
 ---
 
-## ?? Project Structure
+## Project Structure
 
 ```
 ModelShield/
-¦
+|
 +-- app/
-¦   +-- layout.tsx                  # Root layout — fonts, background, cursor glow
-¦   +-- globals.css                 # CSS variables, animations, utility classes
-¦   +-- page.tsx                    # / — Register page
-¦   +-- verify/
-¦   ¦   +-- page.tsx                # /verify — Plagiarism check + buy license
-¦   +-- components/
-¦       +-- Navbar.tsx              # Top nav — wallet connect/disconnect dropdown
-¦       +-- AnimatedBackground.tsx  # Fullscreen animated background
-¦       +-- CursorGlow.tsx          # Cursor radial glow effect
-¦       +-- ScrambleText.tsx        # Hash scramble-reveal animation
-¦       +-- TiltCard.tsx            # 3D tilt + spotlight on hover
-¦       +-- SuccessConfetti.tsx     # Particle burst on registration success
-¦
+|   +-- layout.tsx                  # Root layout - fonts, background, cursor glow
+|   +-- globals.css                 # CSS variables, animations, utility classes
+|   +-- page.tsx                    # / - Register page
+|   +-- verify/
+|   |   +-- page.tsx                # /verify - Plagiarism check + buy license
+|   +-- components/
+|       +-- Navbar.tsx              # Top nav - wallet connect/disconnect dropdown
+|       +-- AnimatedBackground.tsx  # Fullscreen animated background
+|       +-- CursorGlow.tsx          # Cursor radial glow effect
+|       +-- ScrambleText.tsx        # Hash scramble-reveal animation
+|       +-- TiltCard.tsx            # 3D tilt + spotlight on hover
+|       +-- SuccessConfetti.tsx     # Particle burst on registration success
+|
 +-- public/                         # Static assets
 +-- next.config.ts
 +-- tsconfig.json
@@ -208,13 +208,15 @@ ModelShield/
 
 ---
 
-## ?? Smart Contract Deep Dive
+## Smart Contract Deep Dive
 
-**Contract:** `ModelRegistryEconomy`
-**Network:** Ethereum Sepolia Testnet
-**Address:** `0xB33696938e5b161b337d58C03b98f7C28b065c0f`
-**Standard:** ERC-721 — every registered model is a unique, tradeable NFT
-**Token:** `AI Model DRM (AIMDL)`
+**Contract:** `ModelRegistryEconomy`  
+**Network:** Ethereum Sepolia Testnet  
+**Address:** `0xB33696938e5b161b337d58C03b98f7C28b065c0f`  
+**Standard:** ERC-721 - every registered model is a unique, tradeable NFT  
+**Token:** `AI Model DRM (AIMDL)`  
+
+View on Etherscan: https://sepolia.etherscan.io/address/0xB33696938e5b161b337d58C03b98f7C28b065c0f
 
 ### Data Structure
 
@@ -232,16 +234,16 @@ struct ModelData {
 ### Storage
 
 ```solidity
-mapping(uint256 => ModelData)              public registeredModels; // tokenId ? data
-mapping(string  => uint256)                public hashToTokenId;    // fileHash ? tokenId
-mapping(uint256 => mapping(address => bool)) public hasLicense;     // tokenId ? user ? licensed?
-string[] public allFileHashes;                                       // for L2 plagiarism loop
+mapping(uint256 => ModelData)                public registeredModels; // tokenId -> data
+mapping(string  => uint256)                  public hashToTokenId;    // fileHash -> tokenId
+mapping(uint256 => mapping(address => bool)) public hasLicense;       // tokenId -> user -> licensed?
+string[] public allFileHashes;                                         // for L2 plagiarism loop
 uint256  public nextTokenId = 1;
 ```
 
 ### Key Functions
 
-#### registerModel — Mint a new model NFT
+#### registerModel - Mint a new model NFT
 
 ```solidity
 function registerModel(
@@ -260,7 +262,7 @@ function registerModel(
 }
 ```
 
-#### checkPlagiarism — L2 deep scan across all models
+#### checkPlagiarism - L2 deep scan across all models
 
 ```solidity
 function checkPlagiarism(string memory _s, string memory _b)
@@ -280,22 +282,22 @@ function checkPlagiarism(string memory _s, string memory _b)
 }
 ```
 
-#### buyLicense — Pay ETH, get permanent on-chain license
+#### buyLicense - Pay ETH, get permanent on-chain license
 
 ```solidity
 function buyLicense(uint256 _tokenId) public payable {
     ModelData memory m = registeredModels[_tokenId];
     require(m.owner != address(0), "Model does not exist");
     require(msg.value >= m.licenseFee, "Insufficient ETH sent");
-    hasLicense[_tokenId][msg.sender] = true;                    // grant license
-    (bool success, ) = payable(m.owner).call{value: msg.value}(""); // pay owner
+    hasLicense[_tokenId][msg.sender] = true;                         // grant license
+    (bool success, ) = payable(m.owner).call{value: msg.value}("");  // pay owner
     require(success, "ETH transfer failed");
 }
 ```
 
 ---
 
-## ?? Python Backend Deep Dive
+## Python Backend Deep Dive
 
 A **Flask REST API** with one job: receive a model file, return 3 cryptographic hashes.
 
@@ -314,13 +316,13 @@ Output: {
 ### For TensorFlow / Keras (`.h5`, `.keras`)
 
 ```python
-# File Hash — raw bytes
+# File Hash - raw bytes
 file_hash = hashlib.sha256(open(filepath, 'rb').read()).hexdigest()
 
-# Structural Hash — full JSON model architecture (all layers, units, activations)
+# Structural Hash - full JSON model architecture (all layers, units, activations)
 structural_hash = hashlib.sha256(model.to_json().encode()).hexdigest()
 
-# Behavioral Hash — fixed random input (seed=42) ? predictions ? hash
+# Behavioral Hash - fixed random input (seed=42) -> predictions -> hash
 input_shape[0] = 1
 test_input = np.random.rand(*input_shape).astype(np.float32)
 predictions = model.predict(test_input, verbose=0)
@@ -330,15 +332,15 @@ behavioral_hash = hashlib.sha256(str(np.round(predictions, 4)).encode()).hexdige
 ### For Scikit-Learn (`.pkl`)
 
 ```python
-# File Hash — raw bytes
+# File Hash - raw bytes
 file_hash = hashlib.sha256(open(filepath, 'rb').read()).hexdigest()
 
-# Structural Hash — model type + names/shapes of all learned attributes (coef_, etc.)
+# Structural Hash - model type + names/shapes of all learned attributes (coef_, etc.)
 model_type = type(model).__name__
 learned_attrs = {a: str(getattr(model, a).shape) for a in dir(model) if a.endswith('_')}
 structural_hash = hashlib.sha256(f"{model_type}_{sorted(learned_attrs.items())}".encode()).hexdigest()
 
-# Behavioral Hash — 5 fixed test samples (seed=42) ? predictions ? hash
+# Behavioral Hash - 5 fixed test samples (seed=42) -> predictions -> hash
 test_inputs = np.random.rand(5, n_features)
 predictions = model.predict_proba(test_inputs)  # or predict()
 behavioral_hash = hashlib.sha256(str(np.round(predictions, 4)).encode()).hexdigest()
@@ -349,62 +351,62 @@ behavioral_hash = hashlib.sha256(str(np.round(predictions, 4)).encode()).hexdige
 | Hash | Catches | Missed By |
 |------|---------|-----------|
 | `fileHash` | Byte-for-byte copy | Changing even 1 byte |
-| `structuralHash` | Same architecture (layers, weights shapes) | Retraining from scratch |
+| `structuralHash` | Same architecture (layers, weight shapes) | Retraining from scratch |
 | `behavioralHash` | Same learned behavior / predictions | Completely different training data |
 
 Combined, they make it extremely hard to plagiarize undetected.
 
 ---
 
-## ?? Frontend Pages
+## Frontend Pages
 
-### `/` — Register
+### `/` - Register
 
 Steps user through a 4-phase animated flow:
 
 | Phase | Action |
 |-------|--------|
-| 1 — Analyze Model | File sent to Python backend ? 3 hashes returned |
-| 2 — Scan Blockchain | `hashToTokenId` + `checkPlagiarism` called to block duplicates |
-| 3 — MetaMask | User approves `registerModel(...)` transaction |
-| 4 — Confirmation | Tx mined, NFT created, Etherscan link displayed |
+| 1 - Analyze Model | File sent to Python backend, 3 hashes returned |
+| 2 - Scan Blockchain | `hashToTokenId` + `checkPlagiarism` called to block duplicates |
+| 3 - MetaMask | User approves `registerModel(...)` transaction |
+| 4 - Confirmation | Tx mined, NFT created, Etherscan link displayed |
 
 Features: drag & drop upload, hash panel with scramble-reveal animation, confetti burst on success.
 
-### `/verify` — Plagiarism Check
+### `/verify` - Plagiarism Check
 
 | Result | Meaning |
 |--------|---------|
-| ?? LEVEL 1 — EXACT | fileHash matched — byte-for-byte copy |
-| ?? LEVEL 2 — DEEP | structuralHash or behavioralHash matched — architecture clone |
-| ?? CLEAN | Not found anywhere in the registry |
+| [RED] LEVEL 1 - EXACT | fileHash matched - byte-for-byte copy |
+| [AMBER] LEVEL 2 - DEEP | structuralHash or behavioralHash matched - architecture clone |
+| [GREEN] CLEAN | Not found anywhere in the registry |
 
 Shows: original owner address, registration date, all 3 hash comparisons.
 
-**Buy License:** Pay 0.01 ETH ? `buyLicense(tokenId)` ? permanent on-chain usage right.
+**Buy License:** Pay 0.01 ETH --> `buyLicense(tokenId)` --> permanent on-chain usage right.
 
 ---
 
-## ?? UI Components
+## UI Components
 
 | Component | Purpose |
 |-----------|---------|
 | **Navbar** | Glassmorphism sticky nav. MetaMask connect button with live state. Connected: shows wallet address + dropdown with copy & disconnect. Disconnect persists across refresh via `sessionStorage`. |
 | **AnimatedBackground** | Fullscreen fixed layer: gradient base + 3 animated radial orbs + 18 floating micro-particles. Client-only render prevents SSR hydration mismatch. |
 | **CursorGlow** | 100px radial cyan glow that tracks cursor in real time (no CSS transition lag). Very subtle opacity. |
-| **ScrambleText** | Animates crypto hash strings through random ASCII characters on mount — gives a "decryption reveal" effect. |
-| **TiltCard** | 2° max 3D tilt with spring physics (stiffness 120) + per-card spotlight following cursor. Non-distracting. |
+| **ScrambleText** | Animates crypto hash strings through random ASCII characters on mount - gives a "decryption reveal" effect. |
+| **TiltCard** | 2 degrees max 3D tilt with spring physics (stiffness 120) + per-card spotlight following cursor. Non-distracting. |
 | **SuccessConfetti** | 28 colored particles burst outward on successful model registration. |
 
 ---
 
-## ?? Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- Node.js = 18 ? [nodejs.org](https://nodejs.org)
-- MetaMask extension ? [metamask.io](https://metamask.io)
-- Sepolia test ETH ? [sepoliafaucet.com](https://sepoliafaucet.com)
+- Node.js >= 18 --> [nodejs.org](https://nodejs.org)
+- MetaMask extension --> [metamask.io](https://metamask.io)
+- Sepolia test ETH --> [sepoliafaucet.com](https://sepoliafaucet.com)
 - Python backend running (coordinate with Vansh for URL)
 
 ### Install & Run
@@ -413,7 +415,7 @@ Shows: original owner address, registration date, all 3 hash comparisons.
 git clone https://github.com/vansh3175/ModelSheild.git
 cd ModelSheild
 npm install
-npm run dev          # ? http://localhost:3000
+npm run dev          # --> http://localhost:3000
 
 # Production
 npm run build
@@ -425,7 +427,7 @@ npm start
 ```bash
 cd backend/
 pip install flask flask-cors numpy tensorflow scikit-learn
-python app.py        # ? http://localhost:5000
+python app.py        # --> http://localhost:5000
 ```
 
 Expose via VS Code Dev Tunnels / ngrok and update `axios.post(...)` URL in:
@@ -434,9 +436,9 @@ Expose via VS Code Dev Tunnels / ngrok and update `axios.post(...)` URL in:
 
 ---
 
-## ?? Environment Variables
+## Environment Variables
 
-`.env.local` (optional — hardcoded fallbacks exist):
+`.env.local` (optional - hardcoded fallbacks exist):
 
 ```env
 NEXT_PUBLIC_CONTRACT_ADDRESS=0xB33696938e5b161b337d58C03b98f7C28b065c0f
@@ -444,7 +446,7 @@ NEXT_PUBLIC_CONTRACT_ADDRESS=0xB33696938e5b161b337d58C03b98f7C28b065c0f
 
 ---
 
-## ?? Wallet & Network Setup
+## Wallet & Network Setup
 
 | Setting | Value |
 |---------|-------|
@@ -457,7 +459,7 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 
 ---
 
-## ?? API Reference
+## API Reference
 
 ### POST `/generate-fingerprints`
 
@@ -474,7 +476,7 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 }
 ```
 
-### Contract ABI (read — free, no gas)
+### Contract Functions (read - free, no gas)
 
 | Function | Input | Output |
 |----------|-------|--------|
@@ -483,26 +485,26 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 | `checkPlagiarism(s, b)` | `string, string` | `(bool found, string fileHash)` |
 | `hasLicense(tokenId, address)` | `uint256, address` | `bool` |
 
-### Contract ABI (write — requires MetaMask + gas)
+### Contract Functions (write - requires MetaMask + gas)
 
-| Function | Input | ETH |
+| Function | Input | ETH Required |
 |----------|-------|-----|
 | `registerModel(fh, sh, bh, fee)` | 3 hashes + fee amount | Gas only |
-| `buyLicense(tokenId)` | `uint256` | `>= licenseFee` (0.01 ETH) |
+| `buyLicense(tokenId)` | `uint256` | >= licenseFee (0.01 ETH) |
 
 ---
 
-## ?? Known Limitations
+## Known Limitations
 
-- Backend URL is hardcoded — update both page files when Vansh's tunnel changes
-- Sepolia testnet — ETH has no real value
-- `checkPlagiarism` is O(n) on-chain loop — not scalable for thousands of models without off-chain indexing
+- Backend URL is hardcoded - update both page files when Vansh's tunnel changes
+- Sepolia testnet - ETH has no real value
+- `checkPlagiarism` is O(n) on-chain loop - not scalable for thousands of models without off-chain indexing
 - MetaMask required for Register/Buy License; Verify works without wallet (public RPC fallback)
-- Files are not stored — only hashes go on-chain; original owner should keep the file as ground truth
+- Files are not stored - only hashes go on-chain; original owner should keep the file as ground truth
 
 ---
 
-## ?? Contributors
+## Contributors
 
 | Name | Role | What They Built |
 |------|------|----------------|
@@ -513,8 +515,8 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 
 <div align="center">
 
-**ModelShield — Protecting AI Intellectual Property on the Blockchain**
+**ModelShield - Protecting AI Intellectual Property on the Blockchain**
 
-[View Contract on Etherscan](https://sepolia.etherscan.io/address/0xB33696938e5b161b337d58C03b98f7C28b065c0f) • [GitHub](https://github.com/vansh3175/ModelSheild)
+[View Contract on Etherscan](https://sepolia.etherscan.io/address/0xB33696938e5b161b337d58C03b98f7C28b065c0f) | [GitHub](https://github.com/vansh3175/ModelSheild)
 
 </div>
