@@ -6,7 +6,9 @@ import axios from "axios";
 // This is the "map" of your Solidity smart contract so React knows how to talk to it
 const contractABI = [
   "function registerModel(string memory _fileHash, string memory _structuralHash, string memory _behavioralHash) public",
-  "event ModelRegistered(string fileHash, address owner, uint256 timestamp)"
+  "event ModelRegistered(string fileHash, address owner, uint256 timestamp)",
+  "function checkPlagiarism(string memory _s, string memory _b) public view returns (bool found, string memory matchedFileHash)"
+
 ];
 
 // YOUR DEPLOYED CONTRACT ADDRESS ON SEPOLIA
@@ -27,40 +29,53 @@ export default function Home() {
     }
   };
 
-  const processAndRegister = async () => {
+const processAndRegister = async () => {
     if (!file) return alert("Please select a model file first!");
 
     try {
-      // PHASE 1: Generate Fingerprints via Python Backend
-      setStatus("1/3: Analyzing AI Model (Generating Fingerprints)...");
+      // PHASE 1: Generate Fingerprints
+      setStatus("1/4: Analyzing AI Model (Generating Fingerprints)...");
       const formData = new FormData();
       formData.append("file", file);
-
-      // Make sure your Python Flask app is running on port 5000!
       const response = await axios.post("http://localhost:5000/generate-fingerprints", formData);
       const generatedHashes = response.data;
       setHashes(generatedHashes);
 
-      // PHASE 2: Connect to Blockchain
-      setStatus("2/3: Connecting to Blockchain... Please approve in MetaMask.");
+      // Connect to Blockchain
       if (!(window as any).ethereum) throw new Error("MetaMask is not installed!");
-      
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
 
-      // PHASE 3: Send to Smart Contract
-      setStatus("3/3: Waiting for Blockchain confirmation... (This takes a few seconds)");
+      // 🚨 PHASE 2: THE NEW FIREWALL (Check before registering)
+      setStatus("2/4: Scanning blockchain for existing architecture matches...");
+      
+      // We call your checkPlagiarism function as a read-only check
+      const plagiarismCheck = await contract.checkPlagiarism(
+        generatedHashes.structuralHash,
+        generatedHashes.behavioralHash
+      );
+
+      // If plagiarismCheck[0] is true, it means the model is already in the database!
+      if (plagiarismCheck && plagiarismCheck[0] === true) {
+        setStatus("Registration Blocked: Model already exists on the network!");
+        return alert("🚨 REGISTRATION BLOCKED: This model's architecture and behavior are already registered by another owner!");
+      }
+
+      // PHASE 3: Send to Smart Contract (If clean)
+      setStatus("3/4: Model is clean! Please approve registration in MetaMask.");
       const tx = await contract.registerModel(
         generatedHashes.fileHash,
         generatedHashes.structuralHash,
         generatedHashes.behavioralHash
       );
       
-      await tx.wait(); // Wait for the block to be mined
+      // PHASE 4: Wait for block
+      setStatus("4/4: Waiting for Blockchain confirmation...");
+      await tx.wait(); 
       
       setStatus("Success! Model Identity permanently registered on the blockchain.");
-      setTxHash(tx.hash); // Save the transaction ID to show a success link
+      setTxHash(tx.hash);
 
     } catch (error: any) {
       console.error(error);
