@@ -20,8 +20,9 @@ import { ShieldCheck, Wallet, Loader2, ChevronRight, Zap, Copy, LogOut, Check } 
 type ConnectState = "idle" | "connecting" | "connected";
 
 const NAV_LINKS = [
-  { href: "/",       label: "Register",       icon: <Zap size={14} /> },
-  { href: "/verify", label: "Verify",          icon: <ShieldCheck size={14} /> },
+  { href: "/",          label: "Home",     icon: <Zap size={14} /> },
+  { href: "/register",  label: "Register", icon: <Zap size={14} /> },
+  { href: "/verify",    label: "Verify",   icon: <ShieldCheck size={14} /> },
 ];
 
 export default function Navbar() {
@@ -31,7 +32,24 @@ export default function Navbar() {
   const [scrolled, setScrolled]           = useState(false);
   const [dropdownOpen, setDropdownOpen]   = useState(false);
   const [copied, setCopied]               = useState(false);
+  const [ensName, setEnsName]             = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  /* Resolve ENS name on mainnet (silent — falls back to address on any failure) */
+  useEffect(() => {
+    if (!walletAddress) { setEnsName(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const mainnet = new ethers.JsonRpcProvider("https://cloudflare-eth.com");
+        const name = await mainnet.lookupAddress(walletAddress);
+        if (!cancelled) setEnsName(name ?? null);
+      } catch {
+        if (!cancelled) setEnsName(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [walletAddress]);
 
   /* Close dropdown when clicking outside */
   useEffect(() => {
@@ -123,6 +141,9 @@ export default function Navbar() {
   const shortAddress = walletAddress
     ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
     : "";
+
+  /* What to show on the button: ENS name if resolved, otherwise short address */
+  const displayName = ensName ?? shortAddress;
 
   return (
     <motion.nav
@@ -273,7 +294,7 @@ export default function Navbar() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                   </span>
-                  {shortAddress}
+                  {displayName}
                   <ChevronRight
                     size={12}
                     style={{
@@ -316,28 +337,52 @@ export default function Navbar() {
                   zIndex: 100,
                 }}
               >
-                {/* Address */}
-                <div className="px-4 pt-4 pb-3">
-                  <p className="text-xs mb-1.5" style={{ color: "var(--text-muted)" }}>Connected wallet</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className="text-xs font-mono truncate"
-                      style={{ color: "#10b981", letterSpacing: "0.03em" }}
-                    >
-                      {walletAddress.slice(0, 10)}…{walletAddress.slice(-8)}
-                    </span>
-                    <button
-                      onClick={copyAddress}
-                      className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
-                      style={{
-                        background: copied ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        color: copied ? "#10b981" : "var(--text-muted)",
-                      }}
-                      title="Copy full address"
-                    >
-                      {copied ? <Check size={12} /> : <Copy size={12} />}
-                    </button>
+                {/* Identity */}
+                <div className="px-4 pt-4 pb-3 space-y-2">
+                  {/* ENS name — shown only when resolved */}
+                  {ensName && (
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                        style={{
+                          background: "linear-gradient(135deg,rgba(0,212,255,0.2),rgba(139,92,246,0.2))",
+                          border: "1px solid rgba(0,212,255,0.3)",
+                          color: "#00d4ff",
+                        }}
+                      >
+                        {ensName[0].toUpperCase()}
+                      </div>
+                      <span className="text-sm font-semibold" style={{ color: "#e2eaf4" }}>
+                        {ensName}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Wallet address row */}
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+                      {ensName ? "Address" : "Connected wallet"}
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className="text-xs font-mono truncate"
+                        style={{ color: "#10b981", letterSpacing: "0.03em" }}
+                      >
+                        {walletAddress.slice(0, 10)}…{walletAddress.slice(-8)}
+                      </span>
+                      <button
+                        onClick={copyAddress}
+                        className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
+                        style={{
+                          background: copied ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          color: copied ? "#10b981" : "var(--text-muted)",
+                        }}
+                        title="Copy full address"
+                      >
+                        {copied ? <Check size={12} /> : <Copy size={12} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

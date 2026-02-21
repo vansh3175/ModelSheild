@@ -469,6 +469,7 @@ export default function Verify() {
 
   /* ── Render ─────────────────────────────────────────────── */
   return (
+    <div className="container mx-auto px-4 py-10 max-w-5xl">
     <div className="space-y-8">
 
       {/* ── Hero ──────────────────────────────────────────── */}
@@ -965,6 +966,7 @@ export default function Verify() {
         )}
 
       </AnimatePresence>
+    </div>
     </div>
   );
 }

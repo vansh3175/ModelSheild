@@ -28,7 +28,7 @@ export default function RootLayout({
         {/* Sticky top navbar */}
         <Navbar />
         {/* Page content */}
-        <main className="relative z-10 container mx-auto px-4 py-10 max-w-5xl">
+        <main className="relative z-10 w-full">
           {children}
         </main>
       </body>
