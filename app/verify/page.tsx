@@ -340,7 +340,7 @@ export default function Verify() {
       const formData = new FormData();
       formData.append("file", file);
       const { data: localHashes } = await axios.post(
-        "https://q6lfgqkw-5000.inc1.devtunnels.ms/generate-fingerprints",
+        "http://localhost:5000/generate-fingerprints",
         formData,
         { timeout: 30000 }
       );
