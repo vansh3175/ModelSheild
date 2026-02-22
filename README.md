@@ -30,7 +30,7 @@
 13. [Wallet & Network Setup](#wallet--network-setup)
 14. [API Reference](#api-reference)
 15. [Known Limitations](#known-limitations)
-16. [Contributors](#contributors)
+
 
 ---
 
@@ -407,7 +407,7 @@ Shows: original owner address, registration date, all 3 hash comparisons.
 - Node.js >= 18 --> [nodejs.org](https://nodejs.org)
 - MetaMask extension --> [metamask.io](https://metamask.io)
 - Sepolia test ETH --> [sepoliafaucet.com](https://sepoliafaucet.com)
-- Python backend running (coordinate with Vansh for URL)
+
 
 ### Install & Run
 
@@ -502,16 +502,6 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 - MetaMask required for Register/Buy License; Verify works without wallet (public RPC fallback)
 - Files are not stored - only hashes go on-chain; original owner should keep the file as ground truth
 
----
-
-## Contributors
-
-| Name | Role | What They Built |
-|------|------|----------------|
-| **Vansh Ahuja** | Blockchain & Backend | Solidity smart contract (`ModelRegistryEconomy.sol`), Python Flask fingerprint server, ERC-721 economy design, Sepolia deployment |
-| **Krishna Jain** | Frontend | Next.js app, all React components, ethers.js integration, UI/UX design, animations, bug fixes |
-
----
 
 <div align="center">
 
