@@ -496,7 +496,6 @@ ModelShield **automatically** switches MetaMask to Sepolia and adds it if not pr
 
 ## Known Limitations
 
-- Backend URL is hardcoded - update both page files when Vansh's tunnel changes
 - Sepolia testnet - ETH has no real value
 - `checkPlagiarism` is O(n) on-chain loop - not scalable for thousands of models without off-chain indexing
 - MetaMask required for Register/Buy License; Verify works without wallet (public RPC fallback)
